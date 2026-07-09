@@ -52,6 +52,9 @@ func registerDistErasureRouters(router *mux.Router, endpointServerPools Endpoint
 
 // List of some generic middlewares which are applied for all incoming requests.
 var globalMiddlewares = []mux.MiddlewareFunc{
+	// breakdown timing middleware — must be the outermost middleware so it
+	// can wrap the request body and response writer before any other handler.
+	breakdownTimingMiddleware,
 	// set x-amz-request-id header and others
 	addCustomHeadersMiddleware,
 	// The generic tracer needs to be the first middleware to catch all requests

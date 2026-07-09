@@ -549,6 +549,10 @@ func setBucketForwardingMiddleware(h http.Handler) http.Handler {
 func addCustomHeadersMiddleware(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := w.Header()
+		// T05: boundary between HTTP parse and middleware processing.
+		if bt := getBreakdown(r); bt != nil {
+			bt.T05 = time.Now()
+		}
 		header.Set("X-XSS-Protection", "1; mode=block")                                // Prevents against XSS attacks
 		header.Set("X-Content-Type-Options", "nosniff")                                // Prevent mime-sniff
 		header.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains") // HSTS mitigates variants of MITM attacks

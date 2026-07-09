@@ -33,6 +33,7 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
+	"sync/atomic"
 	"strings"
 	"time"
 
@@ -345,6 +346,13 @@ func doesPresignedSignatureMatch(hashedPayload string, r *http.Request, region s
 //
 // returns ErrNone if signature matches.
 func doesSignatureMatch(hashedPayload string, r *http.Request, region string, stype serviceType) APIErrorCode {
+	// Track internal auth (SigV4) time for breakdown.
+	if bt := getBreakdown(r); bt != nil {
+		start := time.Now()
+		defer func() {
+			atomic.AddInt64(&bt.AuthTotal, int64(time.Since(start)))
+		}()
+	}
 	// Copy request.
 	req := *r
 

@@ -47,6 +47,8 @@ const (
 
 	debugGoCollectorPath collectorPath = "/debug/go"
 
+		breakdownCollectorPath collectorPath = "/s3/breakdown"
+
 	clusterHealthCollectorPath       collectorPath = "/cluster/health"
 	clusterUsageObjectsCollectorPath collectorPath = "/cluster/usage/objects"
 	clusterUsageBucketsCollectorPath collectorPath = "/cluster/usage/buckets"
@@ -453,6 +455,7 @@ func newMetricGroups(r *prometheus.Registry) *metricsV3Collection {
 	// Create all Non-`MetricGroup` collectors here.
 	collectors := map[collectorPath]prometheus.Collector{
 		debugGoCollectorPath: collectors.NewGoCollector(),
+		breakdownCollectorPath: breakdownDuration,
 	}
 
 	// Add all `MetricGroup` collectors to the map.

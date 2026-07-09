@@ -616,6 +616,10 @@ func isSupportedS3AuthType(aType authType) bool {
 func setAuthMiddleware(h http.Handler) http.Handler {
 	// handler for validating incoming authorization headers.
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// T1: end of HTTP parse, start of auth
+		if bt := getBreakdown(r); bt != nil {
+			bt.T1 = time.Now()
+		}
 		tc, ok := r.Context().Value(mcontext.ContextTraceKey).(*mcontext.TraceCtxt)
 
 		aType := getRequestAuthType(r)
@@ -651,14 +655,26 @@ func setAuthMiddleware(h http.Handler) http.Handler {
 				atomic.AddUint64(&globalHTTPStats.rejectedRequestsTime, 1)
 				return
 			}
-			h.ServeHTTP(w, r)
+			// T2: auth complete, handler entry
+		if bt := getBreakdown(r); bt != nil {
+			bt.T2 = time.Now()
+		}
+		h.ServeHTTP(w, r)
 			return
 		case authTypeJWT, authTypeSTS:
-			h.ServeHTTP(w, r)
+			// T2: auth complete, handler entry
+		if bt := getBreakdown(r); bt != nil {
+			bt.T2 = time.Now()
+		}
+		h.ServeHTTP(w, r)
 			return
 		default:
 			if isSupportedS3AuthType(aType) {
-				h.ServeHTTP(w, r)
+				// T2: auth complete, handler entry
+		if bt := getBreakdown(r); bt != nil {
+			bt.T2 = time.Now()
+		}
+		h.ServeHTTP(w, r)
 				return
 			}
 		}

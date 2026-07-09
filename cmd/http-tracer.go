@@ -187,6 +187,11 @@ func httpTrace(f http.HandlerFunc, logBody bool) http.HandlerFunc {
 		tc.ResponseRecorder.LogAllBody = logBody
 		tc.ResponseRecorder.LogErrBody = true
 
+		// Propagate operation name to breakdown timing if present.
+		if bt, ok := r.Context().Value(breakdownCtxKey{}).(*BreakdownTiming); ok {
+			bt.Operation = tc.FuncName
+		}
+
 		f.ServeHTTP(w, r)
 	}
 }
