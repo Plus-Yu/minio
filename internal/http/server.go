@@ -128,6 +128,10 @@ func (srv *Server) Init(listenCtx context.Context, listenErrCallback func(listen
 		l = tls.NewListener(listener, tlsConfig)
 	}
 
+	// Wrap with connection-level timing for S3 breakdown instrumentation.
+	l = &timingListener{Listener: l}
+	srv.ConnContext = connTimingContext
+
 	serve = func() error {
 		return srv.Serve(l)
 	}
