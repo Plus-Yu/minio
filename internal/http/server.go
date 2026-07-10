@@ -124,12 +124,12 @@ func (srv *Server) Init(listenCtx context.Context, listenErrCallback func(listen
 	srv.listenerMutex.Unlock()
 
 	var l net.Listener = listener
-	if tlsConfig != nil {
-		l = tls.NewListener(listener, tlsConfig)
-	}
-
-	// Wrap with connection-level timing for S3 breakdown instrumentation.
+	// Wrap with timing BEFORE TLS so TCPAccept captures pure TCP accept
+	// and TLS handshake time is captured by conn Read/Write accumulators.
 	l = &timingListener{Listener: l}
+	if tlsConfig != nil {
+		l = tls.NewListener(l, tlsConfig)
+	}
 	srv.ConnContext = connTimingContext
 
 	serve = func() error {

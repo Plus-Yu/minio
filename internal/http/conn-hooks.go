@@ -19,6 +19,7 @@ package http
 
 import (
 	"context"
+	"crypto/tls"
 	"net"
 	"sync/atomic"
 	"time"
@@ -32,7 +33,8 @@ type ConnTimingCtxKey struct{}
 // Read/Write accumulators). One ConnTiming is created per accepted connection
 // and shared across all requests on that connection.
 type ConnTiming struct {
-	AcceptTime time.Time // when Accept() returned (after TLS handshake if enabled)
+	AcceptTime   time.Time // when Accept() returned (after TLS if enabled)
+	LastReadTime time.Time // wall clock when most recent conn Read completed
 	readTotal  int64     // nanoseconds inside Read (atomic)
 	writeTotal int64     // nanoseconds inside Write (atomic)
 }
@@ -68,6 +70,7 @@ func (w *connTimingWrapper) Read(b []byte) (int, error) {
 	start := time.Now()
 	n, err := w.Conn.Read(b)
 	atomic.AddInt64(&w.ct.readTotal, int64(time.Since(start)))
+	w.ct.LastReadTime = time.Now()
 	return n, err
 }
 
@@ -80,6 +83,10 @@ func (w *connTimingWrapper) Write(b []byte) (int, error) {
 
 // connTimingContext is an http.Server.ConnContext-compatible function.
 func connTimingContext(ctx context.Context, c net.Conn) context.Context {
+	// Unwrap *tls.Conn to reach the underlying connTimingWrapper.
+	if tc, ok := c.(*tls.Conn); ok {
+		c = tc.NetConn()
+	}
 	if tw, ok := c.(*connTimingWrapper); ok {
 		return context.WithValue(ctx, ConnTimingCtxKey{}, tw.ct)
 	}
