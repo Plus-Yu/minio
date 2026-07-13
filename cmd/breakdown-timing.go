@@ -30,6 +30,7 @@ import (
 // S3 request phase labels used for breakdown histograms.
 const (
 	PhaseHTTPParse    = "http_parse"    // conn Read → middleware entry (Go HTTP request parse)
+	PhaseECMetadata   = "ec_metadata"   // handler entry → ECMetaDone (xl.meta read)
 	PhaseHTTPHeaders  = "http_headers"  // handler entry → WriteHeader call (S3 response headers)
 	PhaseAuthCrypto   = "auth_crypto"   // auth middleware outer + inner SigV4
 	PhaseHandlerLogic = "handler_logic" // handler minus I/O, auth, HTTP headers
@@ -52,6 +53,7 @@ type BreakdownTiming struct {
 	Operation   string    // S3 operation name set by httpTrace
 	AuthTotal       int64     // accumulated internal SigV4 time (ns, atomic)
 	IOWaitTotal     int64     // per-request socket Read/Write diff (ns)
+	ECMetaDone      time.Time // EC metadata complete, HTTP header construction starts
 	HTTPHeaderSent  time.Time // when WriteHeader() was called (HTTP status+headers written)
 	readStart       int64     // ConnTiming.ReadSnapshot at T0
 	writeStart      int64     // ConnTiming.WriteSnapshot at T0
@@ -121,10 +123,15 @@ func breakdownTimingMiddleware(h http.Handler) http.Handler {
 				Observe(bt.T05.Sub(bt.T0).Seconds())
 		}
 
-		// HTTP headers: handler entry → WriteHeader, minus internal auth.
+		// EC metadata: handler entry → ECMetaDone (xl.meta read + deserialize).
+		if !bt.ECMetaDone.IsZero() {
+			breakdownDuration.WithLabelValues(PhaseECMetadata, op, method).
+				Observe(bt.ECMetaDone.Sub(bt.T2).Seconds())
+		}
+
+		// HTTP headers: ECMetaDone → WriteHeader.
 		if !bt.HTTPHeaderSent.IsZero() {
-			hdrDelta := bt.HTTPHeaderSent.Sub(bt.T2).Seconds() -
-				time.Duration(atomic.LoadInt64(&bt.AuthTotal)).Seconds()
+			hdrDelta := bt.HTTPHeaderSent.Sub(bt.ECMetaDone).Seconds()
 			if hdrDelta > 0 {
 				breakdownDuration.WithLabelValues(PhaseHTTPHeaders, op, method).
 					Observe(hdrDelta)
@@ -134,12 +141,8 @@ func breakdownTimingMiddleware(h http.Handler) http.Handler {
 		breakdownDuration.WithLabelValues(PhaseAuthCrypto, op, method).
 			Observe(bt.T2.Sub(bt.T1).Seconds() + time.Duration(atomic.LoadInt64(&bt.AuthTotal)).Seconds())
 		// handler_logic: from WriteHeader to T3, minus I/O.
-		handlerDur := bt.T3.Sub(bt.T2).Seconds() -
-			time.Duration(bt.IOWaitTotal+atomic.LoadInt64(&bt.AuthTotal)).Seconds()
-		if !bt.HTTPHeaderSent.IsZero() {
-			handlerDur = bt.T3.Sub(bt.HTTPHeaderSent).Seconds() -
-				time.Duration(bt.IOWaitTotal).Seconds()
-		}
+		handlerDur := bt.T3.Sub(bt.HTTPHeaderSent).Seconds() -
+			time.Duration(bt.IOWaitTotal).Seconds()
 		breakdownDuration.WithLabelValues(PhaseHandlerLogic, op, method).
 			Observe(handlerDur)
 		breakdownDuration.WithLabelValues(PhaseIOWait, op, method).

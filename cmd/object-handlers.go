@@ -502,6 +502,11 @@ func (api objectAPIHandlers) getObjectHandler(ctx context.Context, objectAPI Obj
 	// filter object lock metadata if permission does not permit
 	objInfo.UserDefined = objectlock.FilterObjectLockMetadata(objInfo.UserDefined, getRetPerms != ErrNone, legalHoldPerms != ErrNone)
 
+	// ECMetaDone: EC metadata complete, HTTP header construction starts.
+	if bt := getBreakdown(r); bt != nil {
+		bt.ECMetaDone = time.Now()
+	}
+
 	// Set encryption response headers
 	if kind, isEncrypted := crypto.IsEncrypted(objInfo.UserDefined); isEncrypted {
 		switch kind {
